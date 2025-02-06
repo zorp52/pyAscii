@@ -1,90 +1,126 @@
 import cv2
 import numpy as np
 import tkinter as tk
-from tkinter import filedialog, Text, Label, Entry, Scale, Button
-from PIL import Image, ImageTk, ImageEnhance
+from tkinter import filedialog, Text, Label, Entry, Scale, Button, Frame
+from PIL import Image, ImageTk, ImageEnhance, ImageOps
 
-# The entirety of braile unicode characters
 ASCII_CHARS = "⠀⠁⠂⠃⠄⠅⠆⠇⠈⠉⠊⠋⠌⠍⠎⠏⠐⠑⠒⠓⠔⠕⠖⠗⠘⠙⠚⠛⠜⠝⠞⠟⠠⠡⠢⠣⠤⠥⠦⠧⠨⠩⠪⠫⠬⠭⠮⠯⠰⠱⠲⠳⠴⠵⠶⠷⠸⠹⠺⠻⠼⠽⠾⠿⡀⡁⡂⡃⡄⡅⡆⡇⡈⡉⡊⡋⡌⡍⡎⡏⡐⡑⡒⡓⡔⡕⡖⡗⡘⡙⡚⡛⡜⡝⡞⡟⡠⡡⡢⡣⡤⡥⡦⡧⡨⡩⡪⡫⡬⡭⡮⡯⡰⡱⡲⡳⡴⡵⡶⡷⡸⡹⡺⡻⡼⡽⡾⡿⢀⢁⢂⢃⢄⢅⢆⢇⢈⢉⢊⢋⢌⢍⢎⢏⢐⢑⢒⢓⢔⢕⢖⢗⢘⢙⢚⢛⢜⢝⢞⢟⢠⢡⢢⢣⢤⢥⢦⢧⢨⢩⢪⢫⢬⢭⢮⢯⢰⢱⢲⢳⢴⢵⢶⢷⢸⢹⢺⢻⢼⢽⢾⢿⣀⣁⣂⣃⣄⣅⣆⣇⣈⣉⣊⣋⣌⣍⣎⣏⣐⣑⣒⣓⣔⣕⣖⣗⣘⣙⣚⣛⣜⣝⣞⣟⣠⣡⣢⣣⣤⣥⣦⣧⣨⣩⣪⣫⣬⣭⣮⣯⣰⣱⣲⣳⣴⣵⣶⣷⣸⣹⣺⣻⣼⣽⣾⣿"
 
-def imgResize(image, new_width, new_height):
-    return cv2.resize(image, (new_width, new_height))
+def imgResize(image, newWidth, newHeight):
+    return cv2.resize(image, (newWidth, newHeight))
 
-def adjustImg(image):
+def imgAdjust(image):
+    if grayscaleSlider.get() == 1:
+        image = ImageOps.grayscale(image)
+    
+    image = image.convert("RGB")
+    
     enhancer = ImageEnhance.Brightness(image)
-    image = enhancer.enhance(brightness_slider.get() / 100)
+    image = enhancer.enhance(brightnessSlider.get() / 100)
     enhancer = ImageEnhance.Sharpness(image)
-    image = enhancer.enhance(sharpness_slider.get() / 100)
+    image = enhancer.enhance(sharpnessSlider.get() / 100)
+    enhancer = ImageEnhance.Color(image)
+    image = enhancer.enhance(saturationSlider.get() / 100)
+    
+    if sepiaSlider.get() == 1:
+        sepiaImage = np.array(image)
+        sepiaFilter = np.array([[0.393, 0.769, 0.189],
+                               [0.349, 0.686, 0.168],
+                               [0.272, 0.534, 0.131]])
+        sepiaImage = sepiaImage.dot(sepiaFilter.T)
+        sepiaImage = np.clip(sepiaImage, 0, 255).astype(np.uint8)
+        image = Image.fromarray(sepiaImage)
+    if invertSlider.get() == 1:
+        image = ImageOps.invert(image)
     return image
 
-def imgConvert(image, new_width, new_height):
-    gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    resized_image = imgResize(gray_image, new_width, new_height)
-    ascii_str = ""
-    for row in resized_image:
+def imgConvert(image, newWidth, newHeight):
+    grayImage = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    resizedImage = imgResize(grayImage, newWidth, newHeight)
+    asciiStr = ""
+    for row in resizedImage:
         for pixel in row:
-            ascii_str += ASCII_CHARS[pixel // (256 // len(ASCII_CHARS))]
-        ascii_str += "\n"
-    return ascii_str
+            asciiStr += ASCII_CHARS[pixel // (256 // len(ASCII_CHARS))]
+        asciiStr += "\n"
+    return asciiStr
 
 def fileOpen():
     global image
-    file_path = filedialog.askopenfilename()
-    if file_path:
-        image = cv2.imread(file_path)
-        imgRefresh()
+    filePath = filedialog.askopenfilename()
+    if filePath:
+        image = cv2.imread(filePath)
+        refreshImage()
 
-def imgRefresh():
+def refreshImage():
     if image is not None:
-        adjusted_image = adjustImg(Image.fromarray(cv2.cvtColor(image, cv2.COLOR_BGR2RGB)))
-        ascii_art = imgConvert(np.array(adjusted_image), int(width_entry.get()), int(height_entry.get()))
-        text_widget.delete(1.0, tk.END)
-        text_widget.insert(tk.END, ascii_art)
-        imgPreview(adjusted_image)
+        adjustedImage = imgAdjust(Image.fromarray(cv2.cvtColor(image, cv2.COLOR_BGR2RGB)))
+        asciiArt = imgConvert(np.array(adjustedImage), int(widthEntry.get()), int(heightEntry.get()))
+        textWidget.delete(1.0, tk.END)
+        textWidget.insert(tk.END, asciiArt)
+        displayPreview(adjustedImage)
 
-def imgPreview(image):
+def displayPreview(image):
     image.thumbnail((200, 200))
     photo = ImageTk.PhotoImage(image)
-    preview_label.config(image=photo)
-    preview_label.image = photo
+    previewLabel.config(image=photo)
+    previewLabel.image = photo
 
 root = tk.Tk()
 root.title("ASCII Image Converter")
 root.geometry("1280x720")
 
-frame = tk.Frame(root)
-frame.pack()
+controlFrame = Frame(root)
+controlFrame.pack(fill=tk.X, padx=10, pady=10)
 
-width_label = Label(frame, text="Width:")
-width_label.pack(side=tk.LEFT)
-width_entry = Entry(frame)
-width_entry.pack(side=tk.LEFT)
-width_entry.insert(0, "20")
+widthLabel = Label(controlFrame, text="Width:")
+widthLabel.pack(side=tk.LEFT)
+widthEntry = Entry(controlFrame, width=5)
+widthEntry.pack(side=tk.LEFT, padx=5)
+widthEntry.insert(0, "20")
 
-height_label = Label(frame, text="Height:")
-height_label.pack(side=tk.LEFT)
-height_entry = Entry(frame)
-height_entry.pack(side=tk.LEFT)
-height_entry.insert(0, "20")
+heightLabel = Label(controlFrame, text="Height:")
+heightLabel.pack(side=tk.LEFT)
+heightEntry = Entry(controlFrame, width=5)
+heightEntry.pack(side=tk.LEFT, padx=5)
+heightEntry.insert(0, "20")
 
-brightness_slider = Scale(frame, from_=50, to=150, orient=tk.HORIZONTAL, label="Brightness")
-brightness_slider.set(100)
-brightness_slider.pack()
+brightnessSlider = Scale(controlFrame, from_=50, to=150, orient=tk.HORIZONTAL, label="Brightness")
+brightnessSlider.set(100)
+brightnessSlider.pack(side=tk.LEFT, padx=10)
 
-sharpness_slider = Scale(frame, from_=50, to=150, orient=tk.HORIZONTAL, label="Sharpness")
-sharpness_slider.set(100)
-sharpness_slider.pack()
+sharpnessSlider = Scale(controlFrame, from_=50, to=150, orient=tk.HORIZONTAL, label="Sharpness")
+sharpnessSlider.set(100)
+sharpnessSlider.pack(side=tk.LEFT, padx=10)
 
-open_button = Button(frame, text="Open Image", command=fileOpen)
-open_button.pack()
+saturationSlider = Scale(controlFrame, from_=50, to=150, orient=tk.HORIZONTAL, label="Saturation")
+saturationSlider.set(100)
+saturationSlider.pack(side=tk.LEFT, padx=10)
 
-refresh_button = Button(frame, text="Refresh Image", command=imgRefresh)
-refresh_button.pack()
+grayscaleSlider = tk.IntVar()
+tk.Checkbutton(controlFrame, text="Grayscale", variable=grayscaleSlider).pack(side=tk.LEFT, padx=10)
 
-text_widget = Text(root, wrap=tk.WORD, font=("Courier", 8))
-text_widget.pack(expand=True, fill=tk.BOTH)
+sepiaSlider = tk.IntVar()
+tk.Checkbutton(controlFrame, text="Sepia", variable=sepiaSlider).pack(side=tk.LEFT, padx=10)
 
-preview_label = tk.Label(root)
-preview_label.pack()
+invertSlider = tk.IntVar()
+tk.Checkbutton(controlFrame, text="Invert Colors", variable=invertSlider).pack(side=tk.LEFT, padx=10)
+
+openButton = Button(controlFrame, text="Open Image", command=fileOpen)
+openButton.pack(side=tk.LEFT, padx=10)
+
+refreshButton = Button(controlFrame, text="Refresh Image", command=refreshImage)
+refreshButton.pack(side=tk.LEFT, padx=10)
+
+previewFrame = Frame(root)
+previewFrame.pack(fill=tk.X, padx=10, pady=10)
+
+previewLabel = tk.Label(previewFrame)
+previewLabel.pack()
+
+textFrame = Frame(root)
+textFrame.pack(expand=True, fill=tk.BOTH, padx=10, pady=10)
+
+textWidget = Text(textFrame, wrap=tk.WORD, font=("Courier", 8))
+textWidget.pack(expand=True, fill=tk.BOTH)
 
 root.mainloop()
